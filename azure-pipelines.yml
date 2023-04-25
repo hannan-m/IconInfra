@@ -1,0 +1,107 @@
+trigger:
+  branches:
+    include:
+      - release
+      - master
+
+stages:
+  - stage: Build
+    displayName: "Build and Test"
+    jobs:
+      - job: Build
+        displayName: "Build"
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - checkout: self
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: "1.4.5"
+          - task: TerraformCLI@0
+            inputs:
+              command: "init"
+              workingDirectory: "$(Build.SourcesDirectory)"
+          - task: TerraformCLI@0
+            inputs:
+              command: "validate"
+              workingDirectory: "$(Build.SourcesDirectory)"
+          - task: TerraformCLI@0
+            inputs:
+              command: "fmt"
+              workingDirectory: "$(Build.SourcesDirectory)"
+          - task: TerraformCLI@0
+            inputs:
+              command: "plan"
+              workingDirectory: "$(Build.SourcesDirectory)"
+              commandOptions: "-out=tfplan"
+          - publish: "$(Build.SourcesDirectory)/tfplan"
+            artifact: "tfplan"
+
+  - stage: DeployStaging
+    displayName: "Deploy to Staging"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/release'))
+    jobs:
+      - deployment: Deploy
+        displayName: "Deploy"
+        environment: "staging"
+        pool:
+          vmImage: "ubuntu-latest"
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: DownloadPipelineArtifact@2
+                  inputs:
+                    buildType: "current"
+                    artifactName: "tfplan"
+                    targetPath: "$(Pipeline.Workspace)"
+                - task: TerraformInstaller@0
+                  inputs:
+                    terraformVersion: "1.4.5"
+                - task: TerraformCLI@0
+                  inputs:
+                    command: "init"
+                    workingDirectory: "$(Build.SourcesDirectory)"
+                - task: TerraformCLI@0
+                  inputs:
+                    command: "apply"
+                    workingDirectory: "$(Build.SourcesDirectory)"
+                    environmentServiceName: "staging"
+
+  - stage: DeployProduction
+    displayName: "Deploy to Production"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+    jobs:
+      - deployment: Deploy
+        displayName: "Deploy"
+        environment:
+          name: "production"
+          resourceType: "VirtualMachine"
+        pool:
+          vmImage: "ubuntu-latest"
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: DownloadPipelineArtifact@2
+                  inputs:
+                    buildType: "current"
+                    artifactName: "tfplan"
+                    targetPath: "$(Pipeline.Workspace)"
+                - task: TerraformInstaller@0
+                  inputs:
+                    terraformVersion: "1.4.5"
+                - task: TerraformCLI@0
+                  inputs:
+                    command: "init"
+                    workingDirectory: "$(Build.SourcesDirectory)"
+                - task: ManualIntervention@8
+                  displayName: "Manual approval required"
+                  inputs:
+                    instructions: "Review the Terraform plan before applying changes to production"
+                - task: TerraformCLI@0
+                  inputs:
+                    command: "apply"
+                    workingDirectory: "$(Build.SourcesDirectory)"
+                    commandOptions: '-input=false "$(Pipeline.Workspace)/tfplan/tfplan"'
+                    environmentServiceName: "production"
