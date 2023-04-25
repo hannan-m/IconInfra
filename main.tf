@@ -139,3 +139,44 @@ resource "azurerm_mssql_database" "db_production_instance" {
   sku_name       = "S0"
   zone_redundant = true
 }
+
+# Create the App Service Plan
+resource "azurerm_service_plan" "appserviceplan_staging" {
+  name                = "${var.prefix}-service-plan-staging"
+  location            = azurerm_resource_group.testrg.location
+  resource_group_name = azurerm_resource_group.testrg.name
+  os_type             = "Windows"
+  sku_name            = "B1"
+}
+
+# Create the web app, pass in the App Service Plan ID
+resource "azurerm_windows_web_app" "webapp_staging" {
+  name                = "${var.prefix}-web-app-staging"
+  location            = azurerm_resource_group.testrg.location
+  resource_group_name = azurerm_resource_group.testrg.name
+  service_plan_id     = azurerm_service_plan.appserviceplan_staging.id
+  https_only          = true
+  site_config {
+    minimum_tls_version = "1.2"
+  }
+}
+# Create the App Service Plan
+resource "azurerm_service_plan" "appserviceplan_prod" {
+  name                = "${var.prefix}-service-plan-prod"
+  location            = azurerm_resource_group.testrg.location
+  resource_group_name = azurerm_resource_group.testrg.name
+  os_type             = "Windows"
+  sku_name            = "S2"
+}
+
+# Create the web app, pass in the App Service Plan ID
+resource "azurerm_windows_web_app" "webapp_prod" {
+  name                = "${var.prefix}-web-app-prod"
+  location            = azurerm_resource_group.testrg.location
+  resource_group_name = azurerm_resource_group.testrg.name
+  service_plan_id     = azurerm_service_plan.appserviceplan_prod.id
+  https_only          = true
+  site_config {
+    minimum_tls_version = "1.2"
+  }
+}
